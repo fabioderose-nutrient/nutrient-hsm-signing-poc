@@ -1,0 +1,35 @@
+# Local settings and secrets
+.env
+
+# Generated at runtime by the softhsm init container: test PKI and test .p12
+pki/
+p12/
+
+# Fonts you add for the field (licensed fonts must not be committed)
+fonts/*
+!fonts/.gitkeep
+
+# Processed PDFs
+*-processed.pdf
+output/
+
+# .NET build output
+bin/
+obj/
+*.user
+.vs/
+
+# Python virtual environments and caches (sample generator)
+.venv/
+venv/
+__pycache__/
+
+# OS, editor and tool files
+.DS_Store
+.vscode/
+.idea/
+
+# Logs and archives
+*.log
+logs/
+*.zip

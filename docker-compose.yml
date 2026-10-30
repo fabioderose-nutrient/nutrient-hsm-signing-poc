@@ -1,0 +1,104 @@
+name: nutrient-hsm-signing-poc
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: nutrient
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?Set PG_PASSWORD in .env}
+      POSTGRES_DB: nutrient
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nutrient -d nutrient"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  softhsm:
+    build: ./softhsm
+    environment:
+      PKCS11_TOKEN_LABEL: ${PKCS11_TOKEN_LABEL:?Set PKCS11_TOKEN_LABEL in .env}
+      PKCS11_KEY_LABEL: ${PKCS11_KEY_LABEL:?Set PKCS11_KEY_LABEL in .env}
+      PKCS11_PIN: ${PKCS11_PIN:?Set PKCS11_PIN in .env}
+      PKCS11_SO_PIN: ${PKCS11_SO_PIN:?Set PKCS11_SO_PIN in .env}
+      SIGNING_P12_PASSWORD: ${SIGNING_P12_PASSWORD:?Set SIGNING_P12_PASSWORD in .env}
+    volumes:
+      - softhsm-tokens:/var/lib/softhsm/tokens
+      - ./pki:/pki
+      - ./p12:/p12
+
+  signing-service:
+    build: ./signing-service
+    depends_on:
+      softhsm:
+        condition: service_completed_successfully
+    environment:
+      PKCS11_LIBRARY: /usr/lib/softhsm/libsofthsm2.so
+      PKCS11_SLOT: "0"
+      PKCS11_PIN: ${PKCS11_PIN}
+      PKCS11_KEY_LABEL: ${PKCS11_KEY_LABEL}
+      SIGNER_CERTIFICATE_PATH: /pki/signer.crt
+      CA_CERTIFICATES_PATH: /pki/root-ca.crt
+      SIGNING_P12_PATH: ${SIGNING_P12_PATH:-}
+      SIGNING_P12_PASSWORD: ${SIGNING_P12_PASSWORD:-}
+    volumes:
+      - softhsm-tokens:/var/lib/softhsm/tokens
+      - ./pki:/pki:ro
+      - ./p12:/p12:ro
+    restart: unless-stopped
+
+  document-engine:
+    image: pspdfkit/document-engine:1.19.0
+    depends_on:
+      db:
+        condition: service_healthy
+      signing-service:
+        condition: service_started
+    environment:
+      PGUSER: nutrient
+      PGPASSWORD: ${PG_PASSWORD}
+      PGDATABASE: nutrient
+      PGHOST: db
+      API_AUTH_TOKEN: ${DE_API_TOKEN:?Set DE_API_TOKEN in .env}
+      SECRET_KEY_BASE: ${DE_SECRET_KEY_BASE:?Set DE_SECRET_KEY_BASE in .env}
+      # Empty = evaluation mode (watermark). Set one of them for a licensed run.
+      ACTIVATION_KEY: ${DE_ACTIVATION_KEY:-}
+      LICENSE_KEY: ${DE_LICENSE_KEY:-}
+      SIGNING_SERVICE_URL: http://signing-service:8080/sign
+    volumes:
+      - ./fonts:/custom-fonts:ro
+    ports:
+      - "5100:5000"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    depends_on:
+      - document-engine
+    environment:
+      DOCUMENT_ENGINE_URL: http://document-engine:5000
+      DOCUMENT_ENGINE_TOKEN: ${DE_API_TOKEN}
+      SIGNING_SERVICE_URL: http://signing-service:8080/sign
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      PDF_PERMISSIONS: printing,print_high_quality,extract,fill_forms
+      FIELD_PAGE: "2"
+      FIELD_X: "44"
+      FIELD_Y: "792"
+      FIELD_WIDTH: "519"
+      FIELD_HEIGHT: "34"
+      FIELD_NAME: AdditionalInformation
+      FIELD_FONT: Helvetica
+      FIELD_FONT_SIZE: "8"
+      SIGNER_NAME: ""
+      SIGNATURE_REASON: Approved for distribution
+      SIGNATURE_LOCATION: Publishing system
+      FIELD_TEXT: "Default text of the field. The publishing pipeline sends its own text in fieldText, for example the fees and contact details of the distributing bank. The text wraps inside the field, and the field can still be filled in after the document is signed."
+    ports:
+      - "8090:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  softhsm-tokens:

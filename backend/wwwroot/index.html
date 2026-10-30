@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signing API Test</title>
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --surface: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2933;
+    --muted: #6b7280;
+    --accent: #1f5fae;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  main { width: 100%; max-width: 640px; }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  .lead { margin: 0 0 20px; color: var(--muted); line-height: 1.5; }
+  form { display: flex; flex-direction: column; gap: 12px; }
+  fieldset { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  legend { font-weight: 600; padding: 0 4px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  label.switch { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid .wide { grid-column: span 2; }
+  .permissions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+  .permissions label { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+  input[type=file], input[type=text], input[type=password], textarea { font: inherit; font-size: 13px; color: var(--text); }
+  input[type=text], input[type=password], textarea { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; width: 100%; background: #fff; }
+  textarea { min-height: 76px; resize: vertical; }
+  .info { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  button { align-self: flex-start; font: inherit; font-weight: 600; padding: 9px 18px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  code { font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Signing API test</h1>
+  <p class="lead">Sends the PDF and the values below to <code>POST /api/process</code>. The server runs the selected steps with Nutrient Document Engine and returns the final PDF. A publishing pipeline calls the same API. Values are pre-filled with the server defaults.</p>
+  <form method="post" action="/api/process" enctype="multipart/form-data">
+    <fieldset>
+      <legend>Document</legend>
+      <label>PDF (for example samples/sample-product-sheet.pdf)<input type="file" name="file" accept="application/pdf,.pdf" required></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Text field</legend>
+      <label class="switch"><input type="checkbox" name="field" value="true" checked>Add the editable text field</label>
+      <label>Field text<textarea name="fieldText" id="fieldText"></textarea></label>
+      <p class="info" id="fieldInfo"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Password</legend>
+      <label class="switch"><input type="checkbox" name="password" value="true" checked>Set the owner password</label>
+      <label>Owner password, empty = OWNER_PASSWORD from the server<input type="password" name="ownerPassword" autocomplete="off"></label>
+      <div class="permissions" id="permissions">
+        <label><input type="checkbox" name="permissions" value="printing">Printing</label>
+        <label><input type="checkbox" name="permissions" value="print_high_quality">High quality printing</label>
+        <label><input type="checkbox" name="permissions" value="extract">Content copying</label>
+        <label><input type="checkbox" name="permissions" value="extract_accessibility">Accessibility extraction</label>
+        <label><input type="checkbox" name="permissions" value="fill_forms">Form filling</label>
+        <label><input type="checkbox" name="permissions" value="annotations_and_forms">Annotations and forms</label>
+        <label><input type="checkbox" name="permissions" value="modification">Document modification</label>
+        <label><input type="checkbox" name="permissions" value="assemble">Document assembly</label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Signature</legend>
+      <label class="switch"><input type="checkbox" name="sign" value="true" checked>Sign (invisible PAdES B-B)</label>
+      <div class="grid">
+        <label class="wide">Signer name (first and last name), empty = certificate name<input type="text" name="signerName" id="signerName"></label>
+        <label>Reason<input type="text" name="signatureReason" id="signatureReason"></label>
+        <label>Location<input type="text" name="signatureLocation" id="signatureLocation"></label>
+      </div>
+      <p class="info">Written into the signature and shown by PDF readers in the signature details. The signing time is set automatically.</p>
+    </fieldset>
+
+    <button type="submit">Process and download</button>
+  </form>
+</main>
+<script>
+  fetch("/api/defaults").then((response) => response.json()).then((defaults) => {
+    document.getElementById("fieldText").value = defaults.fieldText;
+    document.getElementById("signerName").value = defaults.signerName;
+    document.getElementById("signatureReason").value = defaults.signatureReason;
+    document.getElementById("signatureLocation").value = defaults.signatureLocation;
+    document.querySelectorAll("#permissions input").forEach((input) => { input.checked = defaults.permissions.includes(input.value); });
+    const f = defaults.field;
+    document.getElementById("fieldInfo").textContent = `Fixed position (server configuration): page ${f.page}, x ${f.x}, y ${f.y}, width ${f.width}, height ${f.height} points from the top-left corner, ${f.font} ${f.fontSize} pt, white background.`;
+  });
+</script>
+</body>
+</html>
